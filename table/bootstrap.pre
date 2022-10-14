@@ -1,0 +1,86 @@
+
+
+declare
+procedure New_Table( TABLE_NAME_I  ALL_TABLES.TABLE_NAME%type
+                    ,DDL_I         varchar2 )
+is
+  ALL_TABLES_Rec_W  ALL_TABLES%rowtype;
+  Exist_W           boolean;
+begin
+  begin
+    select  ALL_TABLES.*
+      into  ALL_TABLES_Rec_W
+      from  ALL_TABLES 
+      where ALL_TABLES.OWNER      = 'c##delo'
+      and   ALL_TABLES.TABLE_NAME = upper(TABLE_NAME_I);
+    Exist_W := true;
+  exception
+    when OTHERS then 
+      Exist_W := false;
+  end;
+  if not Exist_W then
+    begin
+      execute immediate DDL_I;
+      dbms_output.put_line( '- DDL Statement:''' || DDL_I || '''');
+    exception 
+      when OTHERS then
+        dbms_output.put_line( '- DDL Error Statement:''' || DDL_I || ''''); 
+        dbms_output.put_line( '- Oracle Error:''' || substr(sqlerrm(sqlcode),1,1000) || ''''); 
+    end;
+  else
+    dbms_output.put_line( '- No Changes(New_Table)');
+  end if;
+end;
+/*
+begin
+New_Table('PLAYER','create table PLAYER
+                    ( 
+                    PLAYER_ID         varchar2(2),
+                    PLAYER_NAME       varchar2(32),
+                    PLAYER_WINS       number(1),    
+                    PLAYER_LOSSES     number(1),      
+                    PROID             varchar2(32),
+                    UPDDTM            date default sysdate
+                    ) ' );
+
+
+ New_Table('MATCH','create table MATCH
+                    ( 
+                    MATCH_ID          varchar2(12),
+                    BOARD_ID          varchar2(12),
+                    PLAYER_ID_WHITE   varchar2(2),
+                    PLAYER_ID_BLACK   varchar2(2),
+                    PROID             varchar2(32),
+                    UPDDTM            date default sysdate
+                    ) ' );
+
+New_Table('BOARD','create table BOARD
+                    ( 
+                    BOARD_ID          varchar2(12),
+                    PROID             varchar2(32),
+                    UPDDTM            date default sysdate
+                    ) ' );
+
+
+New_Table('SQUARE','create table SQUARE
+                    ( 
+                    BOARD_ID          varchar2(12),
+                    SQUARE_FILE       varchar2(1),
+                    SQUARE_RANK       varchar2(1),
+                    SQUARE_COLOR      varchar2(32),
+                    PIECE_TYPE        varchar2(32),
+                    PIECE_COLOR       varchar2(32),  
+                    EMPTY             number(1),
+                    PROID             varchar2(32),
+                    UPDDTM            date default sysdate
+                    ) ' ) ; 
+
+New_Table('PIECES','create table PIECES
+                    (
+                    NAME              varchar2(12),
+                    DESCRIPTION       varchar2(64),
+                    PROID             varchar2(32),
+                    UPDDTM            date default sysdate
+                    ) ' ) ;
+end;
+*/

@@ -1,0 +1,1012 @@
+CREATE OR REPLACE PACKAGE body TEST AS 
+
+    /*
+    ********************************************************************************
+    ** Procedure    : CHESS_TO_CARTESIAN_NOTATION
+    ** Description  : Takes regular chess notation and returns cartesian coordinates.
+    **                Examples: A,1 -> 1,1
+    **                          D,4 -> 4,4
+    ********************************************************************************
+    */
+    function CHESS_TO_CARTESIAN_NOTATION( FILE_I char 
+                                         ,RANK_I char 
+                                         ,X_O out number
+                                         ,Y_O out number)
+    RETURN number IS
+    begin
+      
+        IF FILE_I = 'A' THEN
+            X_O := 1;
+        ELSIF FILE_I = 'B' THEN
+            X_O := 2;
+        ELSIF FILE_I = 'C' THEN
+            X_O := 3;
+        ELSIF FILE_I = 'D' THEN
+            X_O := 4;
+        ELSIF FILE_I = 'E' THEN
+            X_O := 5;
+        ELSIF FILE_I = 'F' THEN
+            X_O := 6;
+        ELSIF FILE_I = 'G' THEN
+            X_O := 7;
+        ELSIF FILE_I = 'H' THEN
+            X_O := 8;
+        ELSE
+            X_O := 0;
+            RETURN(0);
+        END IF;
+
+        IF RANK_I = '1' THEN
+            Y_O := 1;
+        ELSIF RANK_I = '2' THEN
+            Y_O := 2;
+        ELSIF RANK_I = '3' THEN
+            Y_O := 3;
+        ELSIF RANK_I = '4' THEN
+            Y_O := 4;
+        ELSIF RANK_I = '5' THEN
+            Y_O := 5;
+        ELSIF RANK_I = '6' THEN
+            Y_O := 6;
+        ELSIF RANK_I = '7' THEN
+            Y_O := 7;
+        ELSIF RANK_I = '8' THEN
+            Y_O := 8;
+        ELSE
+            Y_O := 0;
+            RETURN(0);
+        END IF;
+
+        RETURN(1);
+
+    end CHESS_TO_CARTESIAN_NOTATION;
+
+
+     /*
+    ********************************************************************************
+    ** Procedure    : PIECE_TYPE_TO_SYMBOL
+    ** Description  : Returns ascii character representing the selected piece.
+    **                This is used when printing the state of the board to the terminal.
+    ********************************************************************************
+    */
+    function PIECE_TYPE_TO_SYMBOL( TYPE_I SQUARE.PIECE_TYPE%type
+                                  ,COLOR_I SQUARE.PIECE_COLOR%type) 
+    RETURN char IS
+        SYMBOL_W char(1);
+    begin
+        IF TYPE_I = 'PAWN' THEN
+            SYMBOL_W := 'P';
+        ELSIF TYPE_I = 'ROOK' THEN
+            SYMBOL_W := 'R';
+        ELSIF TYPE_I = 'KNIGHT' THEN
+            SYMBOL_W := 'N';
+        ELSIF TYPE_I = 'BISHOP' THEN
+            SYMBOL_W := 'B';
+        ELSIF TYPE_I = 'QUEEN' THEN
+            SYMBOL_W := 'Q';
+        ELSIF TYPE_I = 'KING' THEN
+            SYMBOL_W := 'K';
+        ELSE
+            SYMBOL_W := ' ';
+        END IF;
+
+        IF COLOR_I = 'BLACK' THEN
+            IF SYMBOL_W != ' ' THEN
+                SYMBOL_W := LOWER(SYMBOL_W);
+            END IF;    
+        END IF;
+
+        RETURN(SYMBOL_W);
+    end PIECE_TYPE_TO_SYMBOL;
+
+
+     /*
+    ********************************************************************************
+    ** Procedure    : PRINT_BOARD
+    ** Description  : Renders an ascii representation of the board and returns it as a sting.
+    **                This is used for debugging and testing.
+    ********************************************************************************
+    */
+    function PRINT_BOARD(MATCH_ID_I MATCH.MATCH_ID%type) 
+    RETURN varchar IS 
+        CURSOR C_BOARD IS select * from SQUARE where MATCH_ID = MATCH_ID_I order by SQUARE_RANK DESC, SQUARE_FILE;
+        SQUARE_W SQUARE%rowtype;
+        OUTPUT_STRING varchar(256);
+        COUNTER number(1);
+        RANK_NUMBER number(1);
+    begin
+    
+        OPEN C_BOARD;
+        COUNTER := 0;    
+        
+        OUTPUT_STRING := OUTPUT_STRING || '  A B C D E F G H' || CHR(13);
+        OUTPUT_STRING := OUTPUT_STRING || '  ---------------  ' || CHR(13);
+
+        RANK_NUMBER := 8;
+        LOOP
+            FETCH C_BOARD INTO SQUARE_W;
+            EXIT WHEN C_BOARD%NOTFOUND; 
+
+            IF COUNTER = 0 THEN
+            OUTPUT_STRING := OUTPUT_STRING || RANK_NUMBER || '|';
+            END IF;
+
+            
+            OUTPUT_STRING := OUTPUT_STRING || PIECE_TYPE_TO_SYMBOL(SQUARE_W.PIECE_TYPE,SQUARE_W.PIECE_COLOR);
+
+            IF COUNTER < 7 THEN
+            OUTPUT_STRING := OUTPUT_STRING || ' ';
+            END IF;
+            
+            COUNTER := COUNTER +1;  
+
+            IF COUNTER = 8 THEN
+                COUNTER := 0;
+                OUTPUT_STRING := OUTPUT_STRING || '|' || RANK_NUMBER || CHR(13);
+                RANK_NUMBER := RANK_NUMBER -1;
+            END IF;
+
+        END LOOP;
+
+        
+        OUTPUT_STRING := OUTPUT_STRING || '  ---------------  ' || CHR(13);
+        OUTPUT_STRING := OUTPUT_STRING || '  A B C D E F G H' || CHR(13);
+
+        return(OUTPUT_STRING);
+       
+    end PRINT_BOARD;
+
+    /*
+    ********************************************************************************
+    ** Procedure    : BOARD_CONTAINS_COORD
+    ** Description  : Checks if coordinates is within the chess board
+    ********************************************************************************
+    */
+    function BOARD_CONTAINS_COORD(X number, Y number) 
+    RETURN number IS    
+    begin
+        
+        IF  X < 1 THEN
+            RETURN(0);
+        ELSIF X > 8 THEN
+            RETURN(0);
+        ELSIF Y < 1 THEN
+            RETURN(0);
+        ELSIF Y > 8 THEN
+            RETURN(0);
+        ELSE
+            RETURN(1);            
+        END IF; 
+    end BOARD_CONTAINS_COORD;
+
+
+    /*
+    ********************************************************************************
+    ** Procedure    : CHECK_VALID_PATH_HORIZONTAL
+    ** Description  : Checks if all squares in a horizontal segment are empty.
+    **                Every square in the segment has he same y coordinate and has a x coordninate with in a set limit.
+    ********************************************************************************
+    */
+    function CHECK_VALID_PATH_HORIZONTAL( MACTH_ID_I MATCH.MATCH_ID%type
+                                         ,RANK_I SQUARE.SQUARE_RANK%type 
+                                         ,FILE_SMALLEST_I SQUARE.SQUARE_FILE%type 
+                                         ,FILE_LARGEST_I SQUARE.SQUARE_FILE%type) 
+    RETURN number IS
+    CURSOR C_PATH IS select * from square where match_id = MACTH_ID_I and SQUARE_RANK = RANK_I and square_file > FILE_SMALLEST_I and square_file < FILE_LARGEST_I;
+    SQUARE_W SQUARE%rowtype;
+    begin
+
+        OPEN C_PATH;
+
+        LOOP
+            FETCH C_PATH INTO SQUARE_W;
+            EXIT WHEN C_PATH%NOTFOUND;
+
+            IF SQUARE_W.PIECE_TYPE != 'EMPTY' THEN
+                return(0);
+            END IF;
+
+        END LOOP;
+
+        return(1);
+
+    end CHECK_VALID_PATH_HORIZONTAL;
+
+    /*
+    ********************************************************************************
+    ** Procedure    : CHECK_VALID_PATH_VERTICAL
+    ** Description  : Checks if all squares in a vertical segment are empty.
+    **                Every square in the segment has he same x coordinate and has a y coordninate with in a set limit.
+    ********************************************************************************
+    */
+    function CHECK_VALID_PATH_VERTICAL( MACTH_ID_I MATCH.MATCH_ID%type
+                                       ,FILE_I SQUARE.SQUARE_FILE%type
+                                       ,RANK_SMALLEST_I SQUARE.SQUARE_RANK%type 
+                                       ,RANK_LARGEST_I SQUARE.SQUARE_RANK%type) 
+    RETURN number IS
+    CURSOR C_PATH IS select * from square where match_id = MACTH_ID_I and SQUARE_FILE = FILE_I and SQUARE_RANK > RANK_SMALLEST_I and SQUARE_RANK < RANK_LARGEST_I;
+    SQUARE_W SQUARE%rowtype;
+    begin
+
+        OPEN C_PATH;
+
+        LOOP
+            FETCH C_PATH INTO SQUARE_W;
+            EXIT WHEN C_PATH%NOTFOUND;
+
+            IF SQUARE_W.PIECE_TYPE != 'EMPTY' THEN
+                return(0);
+            END IF;
+
+        END LOOP;
+
+        return(1);
+              
+    end CHECK_VALID_PATH_VERTICAL;
+
+    /*
+    ********************************************************************************
+    ** Procedure    : CHECK_VALID_PATH_DIAGONAL_POSITIVE_KSLOPE
+    ** Description  : Checks if all squares in a diagonal segment with a positive slope are empty.
+    **                Segment is defined as squares intersecting the y-axis at the same point, and having a x coordinate within a set limit.
+    **                The y-intercept for a positive slope can be simplified as M = Y - X since the move assumes delta x and delta y are equivelant.
+    ********************************************************************************
+    */
+    function CHECK_VALID_PATH_DIAGONAL_POSITIVE_KSLOPE( MACTH_ID_I MATCH.MATCH_ID%type
+                                                       ,MIN_X SQUARE.SQUARE_FILE%type
+                                                       ,MAX_X SQUARE.SQUARE_RANK%type                                          
+                                                       ,M_I number) 
+    RETURN number IS
+
+    CURSOR C_PATH IS select * from square where match_id = MACTH_ID_I and SQUARE_RANK - SQUARE_FILE = M_I and SQUARE_FILE > MIN_X and SQUARE_FILE < MAX_X;    
+    
+    SQUARE_W SQUARE%rowtype;
+    begin  
+
+        OPEN C_PATH;      
+        LOOP
+            FETCH C_PATH INTO SQUARE_W;
+            EXIT WHEN C_PATH%NOTFOUND;
+
+            IF SQUARE_W.PIECE_TYPE != 'EMPTY' THEN
+                return(0);
+            END IF;
+
+        END LOOP;
+
+        return(1);  
+
+    end CHECK_VALID_PATH_DIAGONAL_POSITIVE_KSLOPE;
+    /*  
+    ********************************************************************************
+    ** Procedure    : CHECK_VALID_PATH_DIAGONAL_NEGATIVE_KSLOPE
+    ** Description  : Checks if all squares in a diagonal segment with a negative slope are empty.
+    **                Segment is defined as squares intersecting the y-axis at the same point, and having a x coordinate within a set limit.
+    **                The y-intercept for a negative slope can be simplified as M = X + Y since the move assumes delta x and delta y are equivelant.
+    ********************************************************************************
+    */
+    function CHECK_VALID_PATH_DIAGONAL_NEGATIVE_KSLOPE( MACTH_ID_I MATCH.MATCH_ID%type
+                                                       ,MIN_X SQUARE.SQUARE_FILE%type
+                                                       ,MAX_X SQUARE.SQUARE_RANK%type                                         
+                                                       ,M_I number) 
+    RETURN number IS
+
+    CURSOR C_PATH IS select * from square where match_id = MACTH_ID_I and SQUARE_FILE + SQUARE_RANK = M_I and SQUARE_FILE > MIN_X and SQUARE_FILE < MAX_X;          
+    
+    SQUARE_W SQUARE%rowtype;
+    begin  
+        OPEN C_PATH;      
+        LOOP
+            FETCH C_PATH INTO SQUARE_W;
+            EXIT WHEN C_PATH%NOTFOUND;
+
+            IF SQUARE_W.PIECE_TYPE != 'EMPTY' THEN
+                return(0);
+            END IF;
+
+        END LOOP;
+
+        return(1);  
+
+    end CHECK_VALID_PATH_DIAGONAL_NEGATIVE_KSLOPE;
+    /*
+    ********************************************************************************
+    ** Procedure    : VALIDATE_MOVE_PAWN
+    ** Description  : Returns 1 if move is valid and 0 if move is invalid.
+    ********************************************************************************
+    */    
+    function VALIDATE_MOVE_PAWN(MATCH_ID_I MATCH.MATCH_ID%type,
+                                X1 number,                           
+                                Y1 number,
+                                X2 number, 
+                                Y2 number,
+                                INVERT_Y_I number,
+                                VARIATION_O out number) 
+    RETURN number IS
+    WITHIN_BOUNDS_W number(1);
+    STEP_W number(1);
+    DX_W number(1);    
+    DY_W number(1);   
+    begin
+        
+        WITHIN_BOUNDS_W := BOARD_CONTAINS_COORD(X2,Y2);
+        IF WITHIN_BOUNDS_W = 0 THEN
+            RETURN(0);
+        END IF;
+
+        DX_W := X2 - X1;
+        DY_W := Y2 - Y1;
+
+        IF DY_W = (2*INVERT_Y_I) and ABS(DX_W) = 0 THEN                                     /*Two steps forward*/
+            IF Y1 = 2 THEN      
+                VARIATION_O := 1;                                                            /*First move white*/
+                RETURN(CHECK_VALID_PATH_VERTICAL(MATCH_ID_I,X1,Y1,Y2));
+            ELSIF Y1 = 7 THEN 
+            
+                VARIATION_O := 1;                                                               /*First move black*/
+                RETURN(CHECK_VALID_PATH_VERTICAL(MATCH_ID_I,X1,Y2,Y1));                    
+            END IF;
+        ELSIF DY_W = (1*INVERT_Y_I) THEN                                                            /*One step forward*/
+            IF ABS(DX_W) = 0 THEN            
+                VARIATION_O := 2; 
+                RETURN(1);
+            ELSIF ABS(DX_W) = 1 THEN
+                VARIATION_O := 3; 
+                RETURN(1);
+            END IF;            
+        END IF;        
+                VARIATION_O := 0; 
+        RETURN(0);     
+
+        
+
+    end VALIDATE_MOVE_PAWN;
+    /*
+    ********************************************************************************
+    ** Procedure    : VALIDATE_MOVE_KNIGHT
+    ** Description  : Returns 1 if move is valid and 0 if move is invalid.
+    **                Function accepts move as valid when delta x = 1 and delta y = 2 or the other way around.
+    ********************************************************************************
+    */    
+    function VALIDATE_MOVE_KNIGHT(MATCH_ID_I MATCH.MATCH_ID%type,
+                                X1 number,                           
+                                Y1 number,
+                                X2 number, 
+                                Y2 number) 
+    RETURN number IS        
+    WITHIN_BOUNDS_W number(1);
+    CURSOR C_SQUARE IS select * from square where MATCH_ID = MATCH_ID_I and SQUARE_FILE = X2 and SQUARE_RANK = Y2;
+    SQUARE_W SQUARE%rowtype;
+    begin
+
+        WITHIN_BOUNDS_W := BOARD_CONTAINS_COORD(X2,Y2);
+        IF WITHIN_BOUNDS_W = 0 THEN
+            RETURN(0);
+        END IF;
+        
+        IF (ABS(Y2 - Y1) = 2 and ABS(X2 - X1) = 1) or (ABS(Y2 - Y1) = 1 and ABS(X2 - X1) = 2) THEN
+            RETURN(1);
+        ELSE
+            RETURN(0);
+        END IF;
+      
+    end VALIDATE_MOVE_KNIGHT;
+
+    /*
+    ********************************************************************************
+    ** Procedure    : VALIDATE_MOVE_KING
+    ** Description  : Returns 1 if move is valid and 0 if move is invalid.
+    **                Function accepts move as valid when the distance is less than 2 squares.
+    ********************************************************************************
+    */ 
+    function VALIDATE_MOVE_KING(MATCH_ID_I MATCH.MATCH_ID%type,
+                                X1 number,                           
+                                Y1 number,
+                                X2 number, 
+                                Y2 number) 
+    RETURN number IS        
+    WITHIN_BOUNDS_W number(1);
+    DIST number(1);
+    begin
+
+        WITHIN_BOUNDS_W := BOARD_CONTAINS_COORD(X2,Y2);
+        IF WITHIN_BOUNDS_W = 0 THEN
+            RETURN(0);
+        END IF;
+        
+        DIST := SQRT((X2-X1) * (X2-X1) + (Y2-Y1) * (Y2-Y1));
+        
+        IF DIST >= 2 THEN
+            RETURN(0);
+        ELSE
+            RETURN(1);
+        END IF;
+      
+    end VALIDATE_MOVE_KING;    
+    /*
+    ********************************************************************************
+    ** Procedure    : VALIDATE_MOVE_BISHOP
+    ** Description  : Returns 1 if move is valid and 0 if move is invalid.
+    **                Early exit when delta x and delta y are not quivilent.
+    **                Calculates the angle to se if slope is positive or negative and 
+    **                calls appropriate function for checking the segment.
+    ********************************************************************************
+    */ 
+    function VALIDATE_MOVE_BISHOP(MATCH_ID_I MATCH.MATCH_ID%type,
+                                X1 number,                           
+                                Y1 number,
+                                X2 number, 
+                                Y2 number) 
+    RETURN number IS        
+    WITHIN_BOUNDS_W number(1);
+    VALID number(1);
+    THETA number(6,2);
+    MIN_X_W number(1);
+    MAX_X_W number(1);
+    M_W number(4);
+    begin
+
+        WITHIN_BOUNDS_W := BOARD_CONTAINS_COORD(X2,Y2);
+        IF WITHIN_BOUNDS_W = 0 THEN
+            RETURN(0);
+        END IF;
+
+        IF ABS(Y2 - Y1) != ABS(X2 - X1) THEN
+            RETURN(0);
+        END IF;
+
+        VALID := 0;
+
+        THETA := ATAN2(Y2-Y1,X2-X1);        
+
+        IF X1 < X2 THEN
+            MIN_X_W := X1;
+            MAX_X_W := X2;
+        ELSE        
+            MIN_X_W := X2;
+            MAX_X_W := X1;
+        END IF;
+
+        IF THETA > 0 THEN
+            M_W := Y1 - X1;
+            VALID := CHECK_VALID_PATH_DIAGONAL_POSITIVE_KSLOPE(MATCH_ID_I,MIN_X_W,MAX_X_W,M_W);
+        ELSE
+            M_W := X1 + Y1;
+            VALID := CHECK_VALID_PATH_DIAGONAL_NEGATIVE_KSLOPE(MATCH_ID_I,MIN_X_W,MAX_X_W,M_W);
+        END IF; 
+
+        RETURN(VALID);
+      
+    end VALIDATE_MOVE_BISHOP;
+
+    /*
+    ********************************************************************************
+    ** Procedure    : VALIDATE_MOVE_ROOK
+    ** Description  : Returns 1 if move is valid and 0 if move is invalid.
+    **                Does an exclusive or on delta x and delta y to se if move is horizontal or vertical.
+    **                Determines the segments limit and calls the appropriate function.
+    ********************************************************************************
+    */ 
+    function VALIDATE_MOVE_ROOK(MATCH_ID_I MATCH.MATCH_ID%type,
+                                X1 number,                           
+                                Y1 number,
+                                X2 number, 
+                                Y2 number) 
+    RETURN number IS
+    WITHIN_BOUNDS_W number(1);
+    COORD_ORIGIN_W number(1);
+    COORD_DESTINATION_W number(1);
+    VALID number(1);
+    begin
+        WITHIN_BOUNDS_W := BOARD_CONTAINS_COORD(X2,Y2);
+        IF WITHIN_BOUNDS_W = 0 THEN
+            RETURN(0);
+        END IF;
+
+        VALID := 0;
+
+        IF XOR(X1 = X2, Y1 = Y2) THEN
+            IF Y1 = Y2 THEN
+                IF X1 < X2 THEN
+                    VALID := CHECK_VALID_PATH_HORIZONTAL(MATCH_ID_I,Y1,X1,X2);
+                ELSIF X1 > X2 THEN
+                    VALID := CHECK_VALID_PATH_HORIZONTAL(MATCH_ID_I,Y1,X2,X1);
+                END IF;
+
+            ELSIF X1 = X2 THEN 
+                IF Y1 < Y2 THEN
+                    VALID := CHECK_VALID_PATH_VERTICAL(MATCH_ID_I,X1,Y1,Y2);
+                ELSIF Y1 > Y2 THEN
+                    VALID := CHECK_VALID_PATH_VERTICAL(MATCH_ID_I,X1,Y2,Y1);
+                END IF;
+            END IF;
+        ELSE
+            RETURN(0);
+        END IF;
+        
+        RETURN(VALID);
+
+    end VALIDATE_MOVE_ROOK;
+    /*
+    ********************************************************************************
+    ** Procedure    : VALIDATE_MOVE_QUEEN
+    ** Description  : Returns 1 if move is valid and 0 if move is invalid.
+    **                Move is accepted if it is a valid rook move or bishop move.
+    ********************************************************************************
+    */ 
+    function VALIDATE_MOVE_QUEEN(MATCH_ID_I MATCH.MATCH_ID%type,
+                                X1 number,                           
+                                Y1 number,
+                                X2 number, 
+                                Y2 number) 
+    RETURN number IS        
+    WITHIN_BOUNDS_W number(1);
+    DIST number(1);
+    VALID number(1);
+    begin
+
+        WITHIN_BOUNDS_W := BOARD_CONTAINS_COORD(X2,Y2);
+        IF WITHIN_BOUNDS_W = 0 THEN
+            RETURN(0);
+        END IF;
+
+        VALID := 0;
+
+        IF ABS(Y2 - Y1) = ABS(X2 - X1) THEN
+            VALID := VALIDATE_MOVE_BISHOP(MATCH_ID_I,X1,Y1,X2,Y2);
+        ELSIF XOR(X1 = X2,Y1 = Y2) THEN
+            VALID := VALIDATE_MOVE_ROOK(MATCH_ID_I,X1,Y1,X2,Y2);
+        END IF;
+        
+        RETURN(VALID);
+      
+    end VALIDATE_MOVE_QUEEN;
+    /*
+    ********************************************************************************
+    ** Procedure    : PLAYER_EXISTS
+    ** Description  : Checks if a player with a certain id exists.
+    ********************************************************************************
+    */
+    function PLAYER_EXISTS(PLAYER_ID_I PLAYER.PLAYER_ID%type) 
+    RETURN number IS
+
+        CURSOR C_PLAYERS IS select PLAYER.PLAYER_ID  FROM PLAYER where PLAYER.PLAYER_ID = PLAYER_ID_I;
+        player_ids PLAYER.PLAYER_ID%type;
+
+    begin
+        OPEN C_PLAYERS;
+            FETCH C_PLAYERS INTO player_ids;
+            IF C_PLAYERS%ROWCOUNT = 0
+            then
+                RETURN(0);
+            else
+                RETURN(1);
+            END IF;
+        CLOSE C_PLAYERS;
+        RETURN(0);
+    end PLAYER_EXISTS;
+
+
+    /*
+    ********************************************************************************
+    ** Procedure    : MATCH_EXISTS
+    ** Description  : Checks if a match with a certain id exists.
+    ********************************************************************************
+    */
+    function MATCH_EXISTS(MATCH_ID_I MATCH.MATCH_ID%type) 
+    RETURN number IS
+
+        CURSOR C_MATCH IS select MATCH.MATCH_ID FROM MATCH where MATCH.MATCH_ID = MATCH_ID_I;
+        MATCH_ID_W MATCH.MATCH_ID%type;
+
+    begin
+        OPEN C_MATCH;
+            FETCH C_MATCH INTO MATCH_ID_W;
+            IF C_MATCH%ROWCOUNT = 0
+            then
+                RETURN(0);
+            else
+                RETURN(1);
+            END IF;
+        CLOSE C_MATCH;
+        RETURN(0);
+    end MATCH_EXISTS;
+
+
+    /*
+    ********************************************************************************
+    ** Procedure    : CREATE_NEW_PLAYER
+    ** Description  : Creates a player if no player with the same is allready exists.
+    ********************************************************************************
+    */
+    procedure CREATE_NEW_PLAYER( PLAYER_ID_I PLAYER.PLAYER_ID%type
+                                ,PLAYER_NAME_I PLAYER.PLAYER_NAME%type
+                                ,RETURN_CODE_O out number) 
+    is
+        PLAYER_EXISTS_W number;
+    begin
+        IF PLAYER_EXISTS(PLAYER_ID_I) = 0 THEN
+            insert into PLAYER(PLAYER_ID,PLAYER_NAME,PLAYER_WINS,PLAYER_LOSSES) values(PLAYER_ID_I,PLAYER_NAME_I,0,0);
+            RETURN_CODE_O := 0;
+        ELSE
+            RETURN_CODE_O := 1;
+        END IF;
+    end CREATE_NEW_PLAYER;
+
+     /*
+    ********************************************************************************
+    ** Procedure    : DELETE_PLAYER
+    ** Description  : Deletes player with the specified id.
+    ********************************************************************************
+    */
+    procedure DELETE_PLAYER( PLAYER_ID_I PLAYER.PLAYER_ID%type 
+                            ,RETURN_CODE_O out number) 
+    is
+    begin
+       DELETE FROM PLAYER WHERE PLAYER.PLAYER_ID = PLAYER_ID_I;
+    end DELETE_PLAYER;
+
+
+    /*
+    ********************************************************************************
+    ** Procedure    : CREATE_NEW_SQUARE
+    ** Description  : Creates a new square. Procedure is called by CREATE_NEW_MATCH when generating the board.
+    ********************************************************************************
+    */
+    procedure CREATE_NEW_SQUARE( MATCH_ID_I MATCH.MATCH_ID%type 
+                                ,SQUARE_FILE_I SQUARE.SQUARE_FILE%type
+                                ,SQUARE_RANK_I SQUARE.SQUARE_RANK%type
+                                ,SQUARE_COLOR_I SQUARE.SQUARE_COLOR%type) 
+    is
+    begin
+
+        insert into SQUARE( MATCH_ID
+                           ,SQUARE_FILE
+                           ,SQUARE_RANK
+                           ,SQUARE_COLOR
+                           ,PIECE_TYPE
+                           ,PIECE_COLOR)
+
+                    values( MATCH_ID_I
+                           ,SQUARE_FILE_I
+                           ,SQUARE_RANK_I
+                           ,SQUARE_COLOR_I
+                           ,'EMPTY'
+                           ,'NONE');
+
+        
+
+    end CREATE_NEW_SQUARE;
+
+
+    /*
+    ********************************************************************************
+    ** Procedure    : CREATE_NEW_MATCH
+    ** Description  : Generates a unique match_id based on the player ids and the current date.
+    **                Generates 64 squares with altering colors and correct notation. Example Black A:1
+    ********************************************************************************
+    */
+
+    procedure CREATE_NEW_MATCH( WHITE_PLAYER_ID_I PLAYER.PLAYER_ID%type
+                               ,BLACK_PLAYER_ID_I PLAYER.PLAYER_ID%type 
+                               ,RETURN_CODE_O out number) 
+    is    
+        MATCH_ID_W varchar2(12);
+
+        CURSOR C_FILES IS select FILES.COORD FROM FILES;
+        CURSOR C_RANKS IS select RANKS.COORD FROM RANKS;
+        FILES_W FILES.COORD%type;
+        RANKS_W RANKS.COORD%type;
+
+        MATCH_ID_SUFFIX varchar(12);
+        INDEX_W number; 
+    begin
+       
+       /*Generate match*/
+        SELECT TO_CHAR(sysdate, 'YYMMDDMI') INTO MATCH_ID_SUFFIX FROM dual;
+        MATCH_ID_W := WHITE_PLAYER_ID_I || BLACK_PLAYER_ID_I || MATCH_ID_SUFFIX;
+
+        IF MATCH_EXISTS(MATCH_ID_W) = 1
+        THEN  
+            RETURN_CODE_O := 1;  
+            RETURN;
+        END IF;   
+
+        insert into MATCH(  MATCH_ID, 
+                            PLAYER_ID_WHITE,
+                            PLAYER_ID_BLACK,
+                            PLAYER_ID_CURRENT_MOVER,
+                            VALIDATE_MOVES) 
+
+                    values( MATCH_ID_W,
+                            WHITE_PLAYER_ID_I,
+                            BLACK_PLAYER_ID_I,
+                            WHITE_PLAYER_ID_I,
+                            0);
+
+        /*Generate squares*/
+        OPEN C_FILES;
+        INDEX_W := 0;
+
+        <<loop_outer>>
+        LOOP
+            FETCH C_FILES INTO FILES_W;
+            EXIT loop_outer WHEN C_FILES%NOTFOUND; 
+            
+            OPEN C_RANKS;
+            <<loop_inner>>
+            LOOP
+                FETCH C_RANKS INTO RANKS_W;
+                EXIT loop_inner WHEN C_RANKS%NOTFOUND;                    
+                    IF MOD(INDEX_W,2) = 0
+                    THEN
+                        CREATE_NEW_SQUARE(MATCH_ID_W,FILES_W,RANKS_W,'BLACK');
+                    ELSE
+                        CREATE_NEW_SQUARE(MATCH_ID_W,FILES_W,RANKS_W,'WHITE');
+                    END IF;
+                    INDEX_W := INDEX_W +1;
+            END LOOP;
+            CLOSE C_RANKS;
+        END LOOP;
+
+
+        IF C_RANKS%ISOPEN
+        THEN
+            CLOSE C_RANKS;
+        END IF;
+
+        RETURN_CODE_O := 0;
+
+    end CREATE_NEW_MATCH;
+
+    /*  
+    ********************************************************************************
+    ** Procedure    : RESET_BOARD
+    ** Description  : Clears and repopulates the board and sets the turn to white.
+    ********************************************************************************
+    */
+    procedure RESET_BOARD( MATCH_ID_I MATCH.MATCH_ID%type 
+                          ,RETURN_CODE_O out number) 
+    is
+        CURSOR C_MATCH IS select * from MATCH where MATCH_ID = MATCH_ID_I;
+        MATCH_W MATCH%rowtype;
+    begin
+        CLEAR_BOARD(MATCH_ID_I,RETURN_CODE_O);
+        POPULATE_BOARD(MATCH_ID_I,RETURN_CODE_O);
+
+        OPEN C_MATCH;
+        FETCH C_MATCH INTO MATCH_W;
+        CLOSE C_MATCH;
+
+        update MATCH SET PLAYER_ID_CURRENT_MOVER = MATCH_W.PLAYER_ID_WHITE where MATCH_ID = MATCH_ID_I;
+
+        RETURN_CODE_O := 1;
+    end;
+    /*  
+    ********************************************************************************
+    ** Procedure    : CLEAR_BOARD
+    ** Description  : 
+    ********************************************************************************
+    */
+    procedure CLEAR_BOARD( MATCH_ID_I MATCH.MATCH_ID%type
+                          ,RETURN_CODE_O out number) 
+    is
+    begin
+        update SQUARE SET PIECE_TYPE = 'EMPTY', PIECE_COLOR = 'NONE' where SQUARE.MATCH_ID = MATCH_ID_I;
+    end;
+    /*  
+    ********************************************************************************
+    ** Procedure    : POPULATE_BOARD
+    ** Description  : 
+    ********************************************************************************
+    */
+    procedure POPULATE_BOARD( MATCH_ID_I MATCH.MATCH_ID%type
+                             ,RETURN_CODE_O out number) is
+    begin
+
+        /*Position white pieces*/
+        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '1';
+        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '2';
+        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '3';
+        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '4';
+        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '5';
+        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '6';
+        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '7';
+        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '8';
+        update SQUARE SET PIECE_TYPE = 'ROOK',   PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '1' and SQUARE.SQUARE_FILE = '1';
+        update SQUARE SET PIECE_TYPE = 'KNIGHT', PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '1' and SQUARE.SQUARE_FILE = '2';
+        update SQUARE SET PIECE_TYPE = 'BISHOP', PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '1' and SQUARE.SQUARE_FILE = '3';
+        update SQUARE SET PIECE_TYPE = 'QUEEN',  PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '1' and SQUARE.SQUARE_FILE = '4';
+        update SQUARE SET PIECE_TYPE = 'KING',   PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '1' and SQUARE.SQUARE_FILE = '5';
+        update SQUARE SET PIECE_TYPE = 'BISHOP', PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '1' and SQUARE.SQUARE_FILE = '6';
+        update SQUARE SET PIECE_TYPE = 'KNIGHT', PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '1' and SQUARE.SQUARE_FILE = '7';
+        update SQUARE SET PIECE_TYPE = 'ROOK',   PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '1' and SQUARE.SQUARE_FILE = '8';
+
+        /*Position black pieces*/
+        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'BLACK' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '7' and SQUARE.SQUARE_FILE = '1';
+        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'BLACK' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '7' and SQUARE.SQUARE_FILE = '2';
+        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'BLACK' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '7' and SQUARE.SQUARE_FILE = '3';
+        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'BLACK' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '7' and SQUARE.SQUARE_FILE = '4';
+        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'BLACK' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '7' and SQUARE.SQUARE_FILE = '5';
+        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'BLACK' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '7' and SQUARE.SQUARE_FILE = '6';
+        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'BLACK' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '7' and SQUARE.SQUARE_FILE = '7';
+        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'BLACK' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '7' and SQUARE.SQUARE_FILE = '8';
+        update SQUARE SET PIECE_TYPE = 'ROOK',   PIECE_COLOR = 'BLACK' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '8' and SQUARE.SQUARE_FILE = '1';
+        update SQUARE SET PIECE_TYPE = 'KNIGHT', PIECE_COLOR = 'BLACK' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '8' and SQUARE.SQUARE_FILE = '2';
+        update SQUARE SET PIECE_TYPE = 'BISHOP', PIECE_COLOR = 'BLACK' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '8' and SQUARE.SQUARE_FILE = '3';
+        update SQUARE SET PIECE_TYPE = 'QUEEN',  PIECE_COLOR = 'BLACK' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '8' and SQUARE.SQUARE_FILE = '4';
+        update SQUARE SET PIECE_TYPE = 'KING',   PIECE_COLOR = 'BLACK' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '8' and SQUARE.SQUARE_FILE = '5';
+        update SQUARE SET PIECE_TYPE = 'BISHOP', PIECE_COLOR = 'BLACK' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '8' and SQUARE.SQUARE_FILE = '6';
+        update SQUARE SET PIECE_TYPE = 'KNIGHT', PIECE_COLOR = 'BLACK' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '8' and SQUARE.SQUARE_FILE = '7';
+        update SQUARE SET PIECE_TYPE = 'ROOK',   PIECE_COLOR = 'BLACK' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '8' and SQUARE.SQUARE_FILE = '8';   
+      
+    end POPULATE_BOARD;
+
+    /*  
+    ********************************************************************************
+    ** Procedure    : MOVE_PIECE
+    ** Description  : 
+    ********************************************************************************
+    */
+    procedure MOVE_PIECE( MATCH_ID_I MATCH.MATCH_ID%type
+                         ,X1_I number                         
+                         ,Y1_I number
+                         ,X2_I number 
+                         ,Y2_I number  
+                         ,RETURN_CODE_O out number) 
+                          
+    is
+
+        MATCH_W MATCH%rowtype;
+        CURSOR C_MATCH IS select * from MATCH where MATCH_ID = MATCH_ID_I;
+
+        SQUARE_ORIGIN_W SQUARE%rowtype;
+        CURSOR C_SQUARE_ORIGIN IS select * from SQUARE where MATCH_ID = MATCH_ID_I and SQUARE_FILE = X1_I and SQUARE_RANK = Y1_I;
+
+        SQUARE_DESTINATION_W SQUARE%rowtype;
+        CURSOR C_SQUARE_DESTINATION IS select * from SQUARE where MATCH_ID = MATCH_ID_I and SQUARE_FILE = X2_I and SQUARE_RANK = Y2_I;
+        PLAYER_COLOR SQUARE.PIECE_COLOR%type;
+        VALID number(1);
+        INVERT_Y_W number(1);
+        PAWN_MOVE_VARIANT number(1);
+        PLAYER_ID_NEXT_MOVER_W MATCH.PLAYER_ID_CURRENT_MOVER%type;
+
+    begin
+        
+        OPEN C_MATCH;
+        FETCH C_MATCH INTO MATCH_W;
+        CLOSE C_MATCH;
+
+        OPEN C_SQUARE_ORIGIN;
+        FETCH C_SQUARE_ORIGIN INTO SQUARE_ORIGIN_W;
+
+        IF MATCH_W.PLAYER_ID_WHITE = MATCH_W.PLAYER_ID_CURRENT_MOVER THEN
+            PLAYER_COLOR := 'WHITE';
+            INVERT_Y_W := 1;
+        ELSE
+            PLAYER_COLOR := 'BLACK';
+            INVERT_Y_W := -1;
+        END IF;
+
+
+        IF SQUARE_ORIGIN_W.PIECE_COLOR != PLAYER_COLOR THEN        
+            RETURN_CODE_O := 1;
+            return;
+        END IF;
+
+
+        IF SQUARE_ORIGIN_W.PIECE_TYPE = 'PAWN' THEN
+            VALID := VALIDATE_MOVE_PAWN(MATCH_ID_I,X1_I,Y1_I,X2_I,Y2_I,INVERT_Y_W, PAWN_MOVE_VARIANT);
+        ELSIF SQUARE_ORIGIN_W.PIECE_TYPE = 'ROOK' THEN
+            VALID := VALIDATE_MOVE_ROOK(MATCH_ID_I,X1_I,Y1_I,X2_I,Y2_I);
+        ELSIF SQUARE_ORIGIN_W.PIECE_TYPE = 'KNIGHT' THEN
+            VALID := VALIDATE_MOVE_KNIGHT(MATCH_ID_I,X1_I,Y1_I,X2_I,Y2_I);
+        ELSIF SQUARE_ORIGIN_W.PIECE_TYPE = 'BISHOP' THEN
+            VALID := VALIDATE_MOVE_BISHOP(MATCH_ID_I,X1_I,Y1_I,X2_I,Y2_I);
+        ELSIF SQUARE_ORIGIN_W.PIECE_TYPE = 'QUEEN' THEN
+            VALID := VALIDATE_MOVE_QUEEN(MATCH_ID_I,X1_I,Y1_I,X2_I,Y2_I);
+        ELSIF SQUARE_ORIGIN_W.PIECE_TYPE = 'KING' THEN
+            VALID := VALIDATE_MOVE_KING(MATCH_ID_I,X1_I,Y1_I,X2_I,Y2_I);
+        ELSE
+            RETURN_CODE_O := 1;
+            return;
+        END IF;
+
+        IF VALID = 0 THEN
+            RETURN_CODE_O := 1;
+            return;
+
+            END IF;
+
+
+        OPEN C_SQUARE_DESTINATION;
+        FETCH C_SQUARE_DESTINATION INTO SQUARE_DESTINATION_W;
+
+        IF SQUARE_DESTINATION_W.PIECE_COLOR = PLAYER_COLOR THEN        
+            RETURN_CODE_O := 1;
+            return;
+        END IF;
+
+        IF SQUARE_ORIGIN_W.PIECE_TYPE = 'PAWN' THEN
+        
+            IF PAWN_MOVE_VARIANT = 3 THEN
+
+                IF SQUARE_DESTINATION_W.PIECE_TYPE = 'EMPTY' THEN        
+                    RETURN_CODE_O := 1;
+                    return;
+                END IF;
+
+            END IF;
+
+        END IF;
+        
+        CLOSE C_SQUARE_DESTINATION;        
+
+        update SQUARE SET PIECE_TYPE = SQUARE_ORIGIN_W.PIECE_TYPE, PIECE_COLOR = SQUARE_ORIGIN_W.PIECE_COLOR where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = SQUARE_DESTINATION_W.SQUARE_RANK and SQUARE.SQUARE_FILE = SQUARE_DESTINATION_W.SQUARE_FILE;  
+
+        update SQUARE SET PIECE_TYPE = 'EMPTY', PIECE_COLOR = 'NONE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = SQUARE_ORIGIN_W.SQUARE_RANK and SQUARE.SQUARE_FILE = SQUARE_ORIGIN_W.SQUARE_FILE;
+
+        IF MATCH_W.PLAYER_ID_CURRENT_MOVER = MATCH_W.PLAYER_ID_WHITE THEN
+            PLAYER_ID_NEXT_MOVER_W := MATCH_W.PLAYER_ID_BLACK;
+        ELSIF MATCH_W.PLAYER_ID_CURRENT_MOVER = MATCH_W.PLAYER_ID_BLACK THEN
+            PLAYER_ID_NEXT_MOVER_W := MATCH_W.PLAYER_ID_WHITE;
+        END IF;
+
+        update MATCH SET PLAYER_ID_CURRENT_MOVER = PLAYER_ID_NEXT_MOVER_W where MATCH_ID = MATCH_ID_I;
+
+        RETURN_CODE_O := 0;
+
+    end MOVE_PIECE;
+
+    procedure MOVE( MATCH_ID_I MATCH.MATCH_ID%type   
+                   ,FILE1_I char  
+                   ,RANK1_I char  
+                   ,FILE2_I char  
+                   ,RANK2_I char 
+                   ,RETURN_CODE_O out number 
+                   ,MSG out varchar) 
+    is
+        X1_W number;                           
+        Y1_W number;
+        X2_W number; 
+        Y2_W number;  
+        MATCH_W MATCH%rowtype;
+        CURSOR C_MATCH IS select * from MATCH where MATCH_ID = MATCH_ID_I;
+    begin
+           
+        IF CHESS_TO_CARTESIAN_NOTATION(FILE1_I, RANK1_I,X1_W,Y1_W) = 0 THEN  
+            MSG := MSG || 'Invalid notation: ' ||  FILE1_I || ':' || RANK1_I || ' -> ' ||  FILE2_I || ':' || RANK2_I || CHR(13);
+            GOTO PRINT_TURN;
+        END IF;
+
+
+        IF CHESS_TO_CARTESIAN_NOTATION(FILE2_I, RANK2_I,X2_W,Y2_W) = 0 THEN    
+            MSG := MSG || 'Invalid notation: ' ||  FILE1_I || ':' || RANK1_I || ' -> ' ||  FILE2_I || ':' || RANK2_I || CHR(13);
+            GOTO PRINT_TURN;
+        END IF; 
+
+        MOVE_PIECE(MATCH_ID_I, X1_W,Y1_W,X2_W, Y2_W,RETURN_CODE_O);
+
+        IF RETURN_CODE_O = 1 THEN
+           MSG := MSG ||  'Invalid move: ' ||  FILE1_I || ':' || RANK1_I || ' -> ' ||  FILE2_I || ':' || RANK2_I || CHR(13);
+        END IF;  
+
+
+        <<PRINT_TURN>>
+
+        OPEN C_MATCH;
+        FETCH C_MATCH INTO MATCH_W;     
+
+        IF MATCH_W.PLAYER_ID_CURRENT_MOVER = MATCH_W.PLAYER_ID_WHITE THEN
+            MSG := MSG || 'TURN: WHITE' || CHR(13);
+        ELSIF MATCH_W.PLAYER_ID_CURRENT_MOVER = MATCH_W.PLAYER_ID_BLACK THEN
+            MSG := MSG || 'TURN: BLACK' || CHR(13);
+        END IF;
+
+        CLOSE C_MATCH;  
+
+    end MOVE;
+
+
+END TEST;
+/
