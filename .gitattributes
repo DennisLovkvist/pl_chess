@@ -1,0 +1,2 @@
+*.body linguist-language=PL/SQL
+*.spec linguist-language=PL/SQL
