@@ -99,6 +99,29 @@ CREATE OR REPLACE PACKAGE body TEST AS
         RETURN(SYMBOL_W);
     end PIECE_TYPE_TO_SYMBOL;
 
+    /*
+    ********************************************************************************
+    ** Procedure    : GET_BOARD
+    ** Description  : Returns the board positions as a string.
+    **                This is used for debugging and testing.
+    ********************************************************************************
+    */
+    function GET_BOARD(MATCH_ID_I MATCH.MATCH_ID%type) 
+    RETURN varchar IS 
+        CURSOR C_BOARD IS select * from SQUARE where MATCH_ID = MATCH_ID_I order by SQUARE_RANK DESC, SQUARE_FILE;
+        SQUARE_W SQUARE%rowtype;
+        OUTPUT_STRING varchar(64);
+    begin
+        OPEN C_BOARD;
+        LOOP
+            FETCH C_BOARD INTO SQUARE_W;
+            EXIT WHEN C_BOARD%NOTFOUND; 
+            OUTPUT_STRING := OUTPUT_STRING || PIECE_TYPE_TO_SYMBOL(SQUARE_W.PIECE_TYPE,SQUARE_W.PIECE_COLOR);
+        END LOOP;
+        return(OUTPUT_STRING);
+       
+    end GET_BOARD;
+
 
      /*
     ********************************************************************************
