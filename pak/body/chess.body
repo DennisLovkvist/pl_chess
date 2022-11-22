@@ -816,6 +816,7 @@ CREATE OR REPLACE PACKAGE body TEST AS
     is
     begin
         update SQUARE SET PIECE_TYPE = 'EMPTY', PIECE_COLOR = 'NONE' where SQUARE.MATCH_ID = MATCH_ID_I;
+        commit;
     end;
     /*  
     ********************************************************************************
@@ -823,19 +824,31 @@ CREATE OR REPLACE PACKAGE body TEST AS
     ** Description  : 
     ********************************************************************************
     */
+    procedure WRITE_LOG( MATCH_ID_I         MATCH.MATCH_ID%type
+                        ,DATA_I             Varchar2
+                        )         
+    is
+    LOG_ID_W varchar2(20);
+    begin
+
+        LOG_ID_W := MATCH_ID_I || TO_CHAR(sysdate, 'YYMMDDMI');
+        insert into LOG(LOG_ID,MATCH_ID,UPDDTM,DATA) values(LOG_ID_W,MATCH_ID_I,sysdate,DATA_I);
+
+    end WRITE_LOG;
+
     procedure POPULATE_BOARD( MATCH_ID_I MATCH.MATCH_ID%type
                              ,RETURN_CODE_O out number) is
     begin
 
         /*Position white pieces*/
-        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '1';
-        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '2';
-        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '3';
-        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '4';
-        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '5';
-        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '6';
-        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '7';
-        update SQUARE SET PIECE_TYPE = 'PAWN', PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '8';
+        update SQUARE SET PIECE_TYPE = 'PAWN',   PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '1';
+        update SQUARE SET PIECE_TYPE = 'PAWN',   PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '2';
+        update SQUARE SET PIECE_TYPE = 'PAWN',   PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '3';
+        update SQUARE SET PIECE_TYPE = 'PAWN',   PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '4';
+        update SQUARE SET PIECE_TYPE = 'PAWN',   PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '5';
+        update SQUARE SET PIECE_TYPE = 'PAWN',   PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '6';
+        update SQUARE SET PIECE_TYPE = 'PAWN',   PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '7';
+        update SQUARE SET PIECE_TYPE = 'PAWN',   PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '2' and SQUARE.SQUARE_FILE = '8';
         update SQUARE SET PIECE_TYPE = 'ROOK',   PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '1' and SQUARE.SQUARE_FILE = '1';
         update SQUARE SET PIECE_TYPE = 'KNIGHT', PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '1' and SQUARE.SQUARE_FILE = '2';
         update SQUARE SET PIECE_TYPE = 'BISHOP', PIECE_COLOR = 'WHITE' where SQUARE.MATCH_ID = MATCH_ID_I and SQUARE.SQUARE_RANK = '1' and SQUARE.SQUARE_FILE = '3';
@@ -976,6 +989,8 @@ CREATE OR REPLACE PACKAGE body TEST AS
         END IF;
 
         update MATCH SET PLAYER_ID_CURRENT_MOVER = PLAYER_ID_NEXT_MOVER_W where MATCH_ID = MATCH_ID_I;
+
+        commit;
 
         RETURN_CODE_O := 0;
 

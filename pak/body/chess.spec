@@ -53,5 +53,7 @@ procedure MOVE( MATCH_ID_I MATCH.MATCH_ID%type,
                     FILE2_I char,  
                     RANK2_I char, 
                     RETURN_CODE_O out number, MSG out varchar);
+procedure WRITE_LOG( MATCH_ID_I         MATCH.MATCH_ID%type
+                    ,DATA_I             Varchar2);  
 end Test;
 /
