@@ -833,7 +833,7 @@ CREATE OR REPLACE PACKAGE body TEST AS
 
         LOG_ID_W := MATCH_ID_I || TO_CHAR(sysdate, 'YYMMDDMI');
         insert into LOG(LOG_ID,MATCH_ID,UPDDTM,DATA) values(LOG_ID_W,MATCH_ID_I,sysdate,DATA_I);
-
+        commit;
     end WRITE_LOG;
 
     procedure POPULATE_BOARD( MATCH_ID_I MATCH.MATCH_ID%type
@@ -906,6 +906,7 @@ CREATE OR REPLACE PACKAGE body TEST AS
         INVERT_Y_W number(1);
         PAWN_MOVE_VARIANT number(1);
         PLAYER_ID_NEXT_MOVER_W MATCH.PLAYER_ID_CURRENT_MOVER%type;
+        LOG_DATA_W varchar2(400);
 
     begin
         
@@ -915,6 +916,9 @@ CREATE OR REPLACE PACKAGE body TEST AS
 
         OPEN C_SQUARE_ORIGIN;
         FETCH C_SQUARE_ORIGIN INTO SQUARE_ORIGIN_W;
+        
+        OPEN C_SQUARE_DESTINATION;  
+        FETCH C_SQUARE_DESTINATION INTO SQUARE_DESTINATION_W;
 
         IF MATCH_W.PLAYER_ID_WHITE = MATCH_W.PLAYER_ID_CURRENT_MOVER THEN
             PLAYER_COLOR := 'WHITE';
@@ -927,6 +931,8 @@ CREATE OR REPLACE PACKAGE body TEST AS
 
         IF SQUARE_ORIGIN_W.PIECE_COLOR != PLAYER_COLOR THEN        
             RETURN_CODE_O := 1;
+            LOG_DATA_W := '[Illegal move]::notation (' || SQUARE_ORIGIN_W.SQUARE_RANK ||':'|| SQUARE_ORIGIN_W.SQUARE_FILE || '->' || SQUARE_DESTINATION_W.SQUARE_RANK ||':'|| SQUARE_DESTINATION_W.SQUARE_FILE || ') '  || PLAYER_COLOR || ' tried to move piece [' || SQUARE_ORIGIN_W.PIECE_TYPE || '] of a different color [' || SQUARE_ORIGIN_W.PIECE_COLOR || ']';
+            WRITE_LOG(MATCH_ID_I,LOG_DATA_W);
             return;
         END IF;
 
@@ -945,20 +951,23 @@ CREATE OR REPLACE PACKAGE body TEST AS
             VALID := VALIDATE_MOVE_KING(MATCH_ID_I,X1_I,Y1_I,X2_I,Y2_I);
         ELSE
             RETURN_CODE_O := 1;
+            LOG_DATA_W := '[Illegal move]::Unknown';
+            WRITE_LOG(MATCH_ID_I,LOG_DATA_W);
             return;
         END IF;
 
+
         IF VALID = 0 THEN
+
+            LOG_DATA_W := '[Illegal move]::notation (' || SQUARE_ORIGIN_W.SQUARE_RANK ||':'|| SQUARE_ORIGIN_W.SQUARE_FILE || '->' || SQUARE_DESTINATION_W.SQUARE_RANK ||':'|| SQUARE_DESTINATION_W.SQUARE_FILE || ') Rule violation';
+            WRITE_LOG(MATCH_ID_I,LOG_DATA_W);
             RETURN_CODE_O := 1;
             return;
+            END IF;        
 
-            END IF;
-
-
-        OPEN C_SQUARE_DESTINATION;
-        FETCH C_SQUARE_DESTINATION INTO SQUARE_DESTINATION_W;
-
-        IF SQUARE_DESTINATION_W.PIECE_COLOR = PLAYER_COLOR THEN        
+        IF SQUARE_DESTINATION_W.PIECE_COLOR = PLAYER_COLOR THEN 
+            LOG_DATA_W := '[Illegal move]::notation (' || SQUARE_ORIGIN_W.SQUARE_RANK ||':'|| SQUARE_ORIGIN_W.SQUARE_FILE || '->' || SQUARE_DESTINATION_W.SQUARE_RANK ||':'|| SQUARE_DESTINATION_W.SQUARE_FILE || ') ' || PLAYER_COLOR || ' tried to take piece [' || SQUARE_ORIGIN_W.PIECE_TYPE || '] of the same color [' || SQUARE_ORIGIN_W.PIECE_COLOR || ']';
+            WRITE_LOG(MATCH_ID_I,LOG_DATA_W);       
             RETURN_CODE_O := 1;
             return;
         END IF;
@@ -989,6 +998,16 @@ CREATE OR REPLACE PACKAGE body TEST AS
         END IF;
 
         update MATCH SET PLAYER_ID_CURRENT_MOVER = PLAYER_ID_NEXT_MOVER_W where MATCH_ID = MATCH_ID_I;
+
+        LOG_DATA_W := '[Update]::[' || PLAYER_COLOR || '] moved piece [' || SQUARE_ORIGIN_W.PIECE_TYPE || '] notation (' || SQUARE_ORIGIN_W.SQUARE_RANK ||':'|| SQUARE_ORIGIN_W.SQUARE_FILE || '->' || SQUARE_DESTINATION_W.SQUARE_RANK ||':'|| SQUARE_DESTINATION_W.SQUARE_FILE || ')';
+        WRITE_LOG(MATCH_ID_I,LOG_DATA_W);
+
+        IF MATCH_W.PLAYER_ID_WHITE = MATCH_W.PLAYER_ID_CURRENT_MOVER THEN
+            LOG_DATA_W := '[Update]::[BLACK] set as current mover';
+        ELSE
+            LOG_DATA_W := '[Update]::[WHITE] set as current mover';
+        END IF;        
+        WRITE_LOG(MATCH_ID_I,LOG_DATA_W);
 
         commit;
 
