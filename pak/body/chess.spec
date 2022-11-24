@@ -54,6 +54,9 @@ procedure MOVE( MATCH_ID_I MATCH.MATCH_ID%type,
                     RANK2_I char, 
                     RETURN_CODE_O out number, MSG out varchar);
 procedure WRITE_LOG( MATCH_ID_I         MATCH.MATCH_ID%type
-                    ,DATA_I             Varchar2);  
+                    ,LOG_MSG_TYPE_I     LOG_MSG_TYPE.LOG_MSG_TYPE_ID%type
+                    ,LOG_MSG_CONTENT_I  Varchar2
+                    ); 
+function LOGIN(PLAYER_NAME_I PLAYER.PLAYER_NAME%type, PASSWORD_I PLAYER.PASSWORD%type) RETURN number; 
 end Test;
 /

@@ -1,5 +1,29 @@
 CREATE OR REPLACE PACKAGE body TEST AS 
 
+
+    /*
+    ********************************************************************************
+    ** Procedure    : LOGIN
+    ** Description  : Simple login
+    **                
+    **                          
+    ********************************************************************************
+    */
+    function LOGIN(PLAYER_NAME_I PLAYER.PLAYER_NAME%type, PASSWORD_I PLAYER.PASSWORD%type)
+    RETURN number IS
+    CURSOR C_USERS IS select * from PLAYER where PLAYER_NAME = PLAYER_NAME_I and PASSWORD = PASSWORD_I;
+    PLAYERS_W PLAYER%rowtype;
+    begin
+       OPEN C_USERS;
+       FETCH C_USERS INTO PLAYERS_W;
+       if C_USERS%ROWCOUNT > 0 then
+         CLOSE C_USERS;
+         RETURN(1);
+       else
+         CLOSE C_USERS;
+         RETURN(0);
+       end if;  
+    end LOGIN;
     /*
     ********************************************************************************
     ** Procedure    : CHESS_TO_CARTESIAN_NOTATION
@@ -778,6 +802,7 @@ CREATE OR REPLACE PACKAGE body TEST AS
             CLOSE C_RANKS;
         END IF;
 
+        commit;
         RETURN_CODE_O := 0;
 
     end CREATE_NEW_MATCH;
@@ -825,14 +850,15 @@ CREATE OR REPLACE PACKAGE body TEST AS
     ********************************************************************************
     */
     procedure WRITE_LOG( MATCH_ID_I         MATCH.MATCH_ID%type
-                        ,DATA_I             Varchar2
-                        )         
+                        ,LOG_MSG_TYPE_I     LOG_MSG_TYPE.LOG_MSG_TYPE_ID%type
+                        ,LOG_MSG_CONTENT_I  Varchar2
+                        )        
     is
     LOG_ID_W varchar2(20);
     begin
 
         LOG_ID_W := MATCH_ID_I || TO_CHAR(sysdate, 'YYMMDDMI');
-        insert into LOG(LOG_ID,MATCH_ID,UPDDTM,DATA) values(LOG_ID_W,MATCH_ID_I,sysdate,DATA_I);
+        insert into LOG(LOG_ID,LOG_MSG_TYPE_ID,MATCH_ID,UPDDTM,LOG_MSG_CONTENT) values(LOG_ID_W,LOG_MSG_TYPE_I,MATCH_ID_I,sysdate,LOG_MSG_CONTENT_I);
         commit;
     end WRITE_LOG;
 
@@ -931,8 +957,8 @@ CREATE OR REPLACE PACKAGE body TEST AS
 
         IF SQUARE_ORIGIN_W.PIECE_COLOR != PLAYER_COLOR THEN        
             RETURN_CODE_O := 1;
-            LOG_DATA_W := '[Illegal move]::notation (' || SQUARE_ORIGIN_W.SQUARE_RANK ||':'|| SQUARE_ORIGIN_W.SQUARE_FILE || '->' || SQUARE_DESTINATION_W.SQUARE_RANK ||':'|| SQUARE_DESTINATION_W.SQUARE_FILE || ') '  || PLAYER_COLOR || ' tried to move piece [' || SQUARE_ORIGIN_W.PIECE_TYPE || '] of a different color [' || SQUARE_ORIGIN_W.PIECE_COLOR || ']';
-            WRITE_LOG(MATCH_ID_I,LOG_DATA_W);
+            LOG_DATA_W := 'notation (' || SQUARE_ORIGIN_W.SQUARE_RANK ||':'|| SQUARE_ORIGIN_W.SQUARE_FILE || '->' || SQUARE_DESTINATION_W.SQUARE_RANK ||':'|| SQUARE_DESTINATION_W.SQUARE_FILE || ') '  || PLAYER_COLOR || ' tried to move piece {' || SQUARE_ORIGIN_W.PIECE_TYPE || '} of a different color {' || SQUARE_ORIGIN_W.PIECE_COLOR || '}';
+            WRITE_LOG(MATCH_ID_I,3,LOG_DATA_W);
             return;
         END IF;
 
@@ -951,23 +977,23 @@ CREATE OR REPLACE PACKAGE body TEST AS
             VALID := VALIDATE_MOVE_KING(MATCH_ID_I,X1_I,Y1_I,X2_I,Y2_I);
         ELSE
             RETURN_CODE_O := 1;
-            LOG_DATA_W := '[Illegal move]::Unknown';
-            WRITE_LOG(MATCH_ID_I,LOG_DATA_W);
+            LOG_DATA_W := 'Unknown';
+            WRITE_LOG(MATCH_ID_I,3,LOG_DATA_W);
             return;
         END IF;
 
 
         IF VALID = 0 THEN
 
-            LOG_DATA_W := '[Illegal move]::notation (' || SQUARE_ORIGIN_W.SQUARE_RANK ||':'|| SQUARE_ORIGIN_W.SQUARE_FILE || '->' || SQUARE_DESTINATION_W.SQUARE_RANK ||':'|| SQUARE_DESTINATION_W.SQUARE_FILE || ') Rule violation';
-            WRITE_LOG(MATCH_ID_I,LOG_DATA_W);
+            LOG_DATA_W := 'notation (' || SQUARE_ORIGIN_W.SQUARE_RANK ||':'|| SQUARE_ORIGIN_W.SQUARE_FILE || '->' || SQUARE_DESTINATION_W.SQUARE_RANK ||':'|| SQUARE_DESTINATION_W.SQUARE_FILE || ') Rule violation';
+            WRITE_LOG(MATCH_ID_I,3,LOG_DATA_W);
             RETURN_CODE_O := 1;
             return;
             END IF;        
 
         IF SQUARE_DESTINATION_W.PIECE_COLOR = PLAYER_COLOR THEN 
-            LOG_DATA_W := '[Illegal move]::notation (' || SQUARE_ORIGIN_W.SQUARE_RANK ||':'|| SQUARE_ORIGIN_W.SQUARE_FILE || '->' || SQUARE_DESTINATION_W.SQUARE_RANK ||':'|| SQUARE_DESTINATION_W.SQUARE_FILE || ') ' || PLAYER_COLOR || ' tried to take piece [' || SQUARE_ORIGIN_W.PIECE_TYPE || '] of the same color [' || SQUARE_ORIGIN_W.PIECE_COLOR || ']';
-            WRITE_LOG(MATCH_ID_I,LOG_DATA_W);       
+            LOG_DATA_W := 'notation (' || SQUARE_ORIGIN_W.SQUARE_RANK ||':'|| SQUARE_ORIGIN_W.SQUARE_FILE || '->' || SQUARE_DESTINATION_W.SQUARE_RANK ||':'|| SQUARE_DESTINATION_W.SQUARE_FILE || ') ' || PLAYER_COLOR || ' tried to take piece [' || SQUARE_ORIGIN_W.PIECE_TYPE || '] of the same color [' || SQUARE_ORIGIN_W.PIECE_COLOR || ']';
+            WRITE_LOG(MATCH_ID_I,3,LOG_DATA_W);       
             RETURN_CODE_O := 1;
             return;
         END IF;
@@ -999,15 +1025,15 @@ CREATE OR REPLACE PACKAGE body TEST AS
 
         update MATCH SET PLAYER_ID_CURRENT_MOVER = PLAYER_ID_NEXT_MOVER_W where MATCH_ID = MATCH_ID_I;
 
-        LOG_DATA_W := '[Update]::[' || PLAYER_COLOR || '] moved piece [' || SQUARE_ORIGIN_W.PIECE_TYPE || '] notation (' || SQUARE_ORIGIN_W.SQUARE_RANK ||':'|| SQUARE_ORIGIN_W.SQUARE_FILE || '->' || SQUARE_DESTINATION_W.SQUARE_RANK ||':'|| SQUARE_DESTINATION_W.SQUARE_FILE || ')';
-        WRITE_LOG(MATCH_ID_I,LOG_DATA_W);
+        LOG_DATA_W := '{' || PLAYER_COLOR || '} moved piece {' || SQUARE_ORIGIN_W.PIECE_TYPE || '} notation (' || SQUARE_ORIGIN_W.SQUARE_RANK ||':'|| SQUARE_ORIGIN_W.SQUARE_FILE || '->' || SQUARE_DESTINATION_W.SQUARE_RANK ||':'|| SQUARE_DESTINATION_W.SQUARE_FILE || ')';
+        WRITE_LOG(MATCH_ID_I,2,LOG_DATA_W);
 
         IF MATCH_W.PLAYER_ID_WHITE = MATCH_W.PLAYER_ID_CURRENT_MOVER THEN
-            LOG_DATA_W := '[Update]::[BLACK] set as current mover';
+            LOG_DATA_W := '[BLACK] set as current mover';
         ELSE
-            LOG_DATA_W := '[Update]::[WHITE] set as current mover';
+            LOG_DATA_W := '[WHITE] set as current mover';
         END IF;        
-        WRITE_LOG(MATCH_ID_I,LOG_DATA_W);
+        WRITE_LOG(MATCH_ID_I,1,LOG_DATA_W);
 
         commit;
 
